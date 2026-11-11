@@ -13,12 +13,13 @@ from sqlalchemy.orm import Session
 from app.database import next_number
 from app.errors import forbidden, invalid, not_found
 from app.models.audit import Approval, AuditEvent, Comment
+from app.models.workflow import ReviewAssignment, ReviewEscalation
 from app.models.finding import Finding, FindingDecision
 from app.models.review import Review, ReviewVersion
 from app.models.user import User, utcnow
 from app.pipeline.engine import run_pipeline
 from app.schemas.finding import Decision, FindingOut, FindingPatch, FindingPatchOut
-from app.schemas.review import (CommentCreate, CommentOut, ReviewCreate, ReviewCreated, ReviewDetail,
+from app.schemas.review import (AssignmentRequest, AuditOut, CommentCreate, CommentOut, EscalationRequest, ReviewCreate, ReviewCreated, ReviewDetail,
                                 ReviewListItem, WorkflowOut)
 from app.services import ai_disclosure, brand_kit_service
 
@@ -56,7 +57,7 @@ def can_view(user: User, review: Review) -> bool:
     if user.role == "creator":
         return review.creator_id == user.id
     if user.role == "reviewer":
-        return review.status in REVIEWER_VISIBLE
+        return review.status in REVIEWER_VISIBLE or review.assigned_reviewer_id == user.id or bool(review.escalation_reason)
     return True  # manager, brand_admin: whole workspace (read-only for brand_admin)
 
 
@@ -65,7 +66,7 @@ def visible_reviews_query(user: User):
     if user.role == "creator":
         q = q.where(Review.creator_id == user.id)
     elif user.role == "reviewer":
-        q = q.where(Review.status.in_(REVIEWER_VISIBLE))
+        q = q.where((Review.status.in_(REVIEWER_VISIBLE)) | (Review.assigned_reviewer_id == user.id) | (Review.escalation_reason != ""))
     return q
 
 
@@ -116,7 +117,8 @@ def create_review(db: Session, user: User, body: ReviewCreate) -> ReviewCreated:
 
     review = Review(id=f"CL-{next_number(db, 'review', 2001)}", workspace_id=user.workspace_id, creator_id=user.id,
                     title=body.title.strip(), intent_note=body.intent_note, status="draft",
-                    brand_kit_version=kit_version, scan_mode=result.mode)
+                    brand_kit_version=kit_version, scan_mode=result.mode, content_type=body.content_type,
+                    external_ref=body.external_ref, content_blocks=[b.model_dump() for b in body.content_blocks])
     db.add(review)
     db.flush()
     db.add(ReviewVersion(review_id=review.id, number=1, content=body.content, created_by=user.id))
@@ -133,6 +135,12 @@ def create_review(db: Session, user: User, body: ReviewCreate) -> ReviewCreated:
     ai_disclosure.record(db, review.id, result)
     audit(db, None, user.workspace_id, review.id, "scan_completed",
           {"mode": result.mode, "findings": len(result.findings), "dropped_unverified": result.dropped_unverified})
+    if body.content_blocks:
+        image_blocks = [b for b in body.content_blocks if b.type == "image"]
+        missing_alt = sum(1 for b in image_blocks if not b.alt_text.strip())
+        audit(db, user, user.workspace_id, review.id, "structured_content_validated",
+              {"blocks": len(body.content_blocks), "image_assets": len(image_blocks), "missing_alt_text": missing_alt, "external_ref": body.external_ref},
+              "Structured content metadata captured before publication")
     transition(db, review, "scanned", None, "scan finished")
     if not result.findings:
         transition(db, review, "in_review", None, "no findings to resolve")
@@ -258,3 +266,53 @@ def approve(db: Session, user: User, review_id: str, note: str) -> WorkflowOut:
 
 def request_changes(db: Session, user: User, review_id: str, note: str) -> WorkflowOut:
     return _decide_review(db, user, review_id, "changes_requested", note)
+
+
+# ---- collaboration -------------------------------------------------------------------------------
+def get_collaboration(db: Session, user: User, review_id: str) -> dict:
+    review = load_review(db, user, review_id)
+    assigned = db.get(User, review.assigned_reviewer_id) if review.assigned_reviewer_id else None
+    return {"assigned_reviewer": assigned.name if assigned else None, "escalation_reason": review.escalation_reason,
+            "content_type": review.content_type, "external_ref": review.external_ref, "content_blocks": review.content_blocks or []}
+
+
+def get_comments(db: Session, user: User, review_id: str) -> list[CommentOut]:
+    review = load_review(db, user, review_id)
+    rows = db.execute(select(Comment, User.name).join(User, User.id == Comment.author_id)
+                      .where(Comment.review_id == review.id).order_by(Comment.created_at.asc())).all()
+    return [CommentOut(id=c.id, author=name, text=c.text, created_at=c.created_at) for c, name in rows]
+
+
+def get_audit(db: Session, user: User, review_id: str) -> list[AuditOut]:
+    review = load_review(db, user, review_id)
+    rows = db.execute(select(AuditEvent, User.name).outerjoin(User, User.id == AuditEvent.actor_id)
+                      .where(AuditEvent.review_id == review.id).order_by(AuditEvent.created_at.asc(), AuditEvent.pk.asc())).all()
+    return [AuditOut(id=e.pk, actor=name or "Greenlight", event_type=e.event_type, detail=e.detail or {}, reason=e.reason, created_at=e.created_at) for e, name in rows]
+
+
+def assign_reviewer(db: Session, user: User, review_id: str, reviewer_id: str) -> WorkflowOut:
+    if user.role != "manager":
+        raise forbidden("Only managers can assign reviewers.")
+    review = load_review(db, user, review_id)
+    reviewer = db.get(User, reviewer_id)
+    if reviewer is None or reviewer.workspace_id != user.workspace_id or reviewer.role != "reviewer":
+        raise invalid("Reviewer must be a reviewer in the same workspace.")
+    review.assigned_reviewer_id = reviewer.id
+    review.updated_at = utcnow()
+    db.add(ReviewAssignment(review_id=review.id, reviewer_id=reviewer.id, assigned_by=user.id))
+    audit(db, user, review.workspace_id, review.id, "review_assigned", {"reviewer_id": reviewer.id, "reviewer": reviewer.name}, "Assigned for collaborative review")
+    db.commit()
+    return WorkflowOut(id=review.id, status=review.status)
+
+
+def escalate_review(db: Session, user: User, review_id: str, reason: str) -> WorkflowOut:
+    if user.role != "manager":
+        raise forbidden("Only managers can escalate reviews.")
+    review = load_review(db, user, review_id)
+    reason = reason.strip()
+    review.escalation_reason = reason
+    review.updated_at = utcnow()
+    db.add(ReviewEscalation(review_id=review.id, actor_id=user.id, reason=reason))
+    audit(db, user, review.workspace_id, review.id, "review_escalated", {"reason": reason}, reason)
+    db.commit()
+    return WorkflowOut(id=review.id, status=review.status)

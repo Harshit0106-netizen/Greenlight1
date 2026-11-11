@@ -32,11 +32,11 @@ interface Decision { action: FindingAction; reason: string; actor: string; edite
 interface StoredFinding extends Omit<ApiFinding, "decision"> { reviewId: string; decisions: Decision[] }
 interface StoredReview {
   id: string; title: string; creatorId: string; status: ReviewApiStatus; kitVersion: number;
-  versions: string[]; createdAt: string; updatedAt: string; decidedAt: string | null;
+  versions: string[]; createdAt: string; updatedAt: string; decidedAt: string | null; assignedReviewer?: string; escalationReason?: string;
 }
 interface Db {
-  kitVersion: number; sources: StoredSource[]; reviews: StoredReview[]; findings: StoredFinding[];
-  seq: { review: number; finding: number; comment: number; source: Record<string, number> };
+  kitVersion: number; sources: StoredSource[]; reviews: StoredReview[]; findings: StoredFinding[]; comments: Array<{ id: string; reviewId: string; author: string; text: string; created_at: string }>; audit: Array<{ id: number; reviewId: string; actor: string; event_type: string; detail: Record<string, unknown>; reason: string; created_at: string }>;
+  seq: { review: number; finding: number; comment: number; audit: number; source: Record<string, number> };
 }
 
 const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
@@ -126,7 +126,8 @@ const src = (id: string, kind: SourceKind, title: string, text: string, kitVersi
 function emptyDb(): Db {
   return {
     kitVersion: 3, reviews: [], findings: [],
-    seq: { review: 2001, finding: 1001, comment: 1, source: { guideline: 6, fact: 22, term: 11, asset: 2 } },
+    comments: [], audit: [],
+    seq: { review: 2001, finding: 1001, comment: 1, audit: 1, source: { guideline: 6, fact: 22, term: 11, asset: 2 } },
     sources: [
       src("G-4.2", "guideline", "Avoid unsupported superlatives", "Do not use claims such as '#1', 'best' or 'fastest' unless an approved fact substantiates them."),
       src("G-2.1", "guideline", "Use a helpful, confident tone", "Be clear and reassuring in the brand voice. Avoid pressure tactics, excessive exclamation marks and fear-based language."),
@@ -147,6 +148,7 @@ function submit(db: Db, userId: string, title: string, content: string, minutesA
   const at = ago(minutesAgo);
   const review: StoredReview = { id, title, creatorId: userId, status: "scanned", kitVersion: db.kitVersion, versions: [content], createdAt: at, updatedAt: at, decidedAt: null };
   db.reviews.push(review);
+  db.audit.push({ id: db.seq.audit++, reviewId: id, actor: userById(userId)?.name ?? "You", event_type: "review_submitted", detail: {}, reason: "", created_at: at });
   for (const h of detect(content, db.sources)) {
     db.findings.push({
       finding_id: `FD-${db.seq.finding++}`, reviewId: id, type: h.type, severity: h.severity,
@@ -155,6 +157,7 @@ function submit(db: Db, userId: string, title: string, content: string, minutesA
       fact_match: null, reason: h.reason, confidence: h.confidence, method: "rule_based", suggestion: h.suggestion, decisions: [],
     });
   }
+  db.audit.push({ id: db.seq.audit++, reviewId: id, actor: "Greenlight", event_type: "scan_completed", detail: { findings: db.findings.filter(f => f.reviewId === id).length }, reason: "", created_at: at });
   if (!db.findings.some(f => f.reviewId === id)) review.status = "in_review";
   return review;
 }
@@ -216,7 +219,7 @@ const TRANSITIONS: Record<ReviewApiStatus, ReviewApiStatus[]> = {
   in_review: ["approved", "changes_requested"], changes_requested: ["resolving", "in_review"], approved: [],
 };
 const canView = (u: MockUser, r: StoredReview) =>
-  u.role === "creator" ? r.creatorId === u.id : u.role === "reviewer" ? REVIEWER_VISIBLE.includes(r.status) : true;
+  u.role === "creator" ? r.creatorId === u.id : u.role === "reviewer" ? REVIEWER_VISIBLE.includes(r.status) || r.assignedReviewer === u.id || Boolean(r.escalationReason) : true;
 const content = (r: StoredReview) => r.versions[r.versions.length - 1];
 const latest = (f: StoredFinding) => f.decisions[f.decisions.length - 1] ?? null;
 const unresolved = (db: Db, id: string) => db.findings.filter(f => f.reviewId === id && (latest(f) === null || latest(f)!.action === "accepted")).length;
@@ -255,9 +258,16 @@ export async function mockRequest<T>(path: string, init: RequestInit = {}, token
 
   const user = token?.startsWith("mock.") ? userById(token.slice(5)) : undefined;
   if (!user) throw unauthorized();
-  const text = (v: unknown) => (typeof v === "string" ? v : "");
+
+  if (route === "/auth/users") {
+    const role = new URLSearchParams(query).get("role");
+    if (!(user.role === "manager" || user.role === "reviewer")) throw forbidden("Only managers and reviewers can view workspace reviewers.");
+    out = MOCK_USERS.filter(u => u.workspace_id === user.workspace_id && (!role || u.role === role)).map(({ email: _e, ...u }) => { void _e; return u; });
+    return out as T;
+  }
   let out: unknown;
   let m: RegExpExecArray | null;
+  const text = (v: unknown) => (typeof v === "string" ? v : "");
 
   if (route === "/brand-kit/sources") {
     if (method === "POST") {
@@ -292,7 +302,7 @@ export async function mockRequest<T>(path: string, init: RequestInit = {}, token
   } else if ((m = /^\/reviews\/([^/]+)$/.exec(route))) {
     const r = reviewFor(db, user, decodeURIComponent(m[1]));
     out = { id: r.id, title: r.title, content: content(r), status: r.status, creator: userById(r.creatorId)?.name ?? "Unknown",
-      brand_kit_version: `v${r.kitVersion}`, updated_at: r.updatedAt } satisfies ReviewDetail;
+      brand_kit_version: `v${r.kitVersion}`, updated_at: r.updatedAt, assigned_reviewer: userById(r.assignedReviewer ?? "")?.name ?? null, escalation_reason: r.escalationReason ?? "", content_type: "text", content_blocks: [] } satisfies ReviewDetail;
   } else if ((m = /^\/reviews\/([^/]+)\/findings$/.exec(route))) {
     const r = reviewFor(db, user, decodeURIComponent(m[1]));
     const rank = { high: 0, medium: 1, low: 2 };
@@ -322,12 +332,40 @@ export async function mockRequest<T>(path: string, init: RequestInit = {}, token
     f.decisions.push({ action, reason, actor: user.id, editedText: action === "edited" ? edited : null });
     transition(r, unresolved(db, r.id) === 0 ? "in_review" : "resolving");
     out = { finding_id: f.finding_id, decision: { action, reason, actor: user.id } };
+  } else if ((m = /^\/reviews\/([^/]+)\/collaboration$/.exec(route))) {
+    const r = reviewFor(db, user, decodeURIComponent(m[1]));
+    out = { assigned_reviewer: userById(r.assignedReviewer ?? "")?.name ?? null, escalation_reason: r.escalationReason ?? "", content_type: "text", content_blocks: [] };
+  } else if ((m = /^\/reviews\/([^/]+)\/comments$/.exec(route)) && method === "GET") {
+    const r = reviewFor(db, user, decodeURIComponent(m[1]));
+    out = db.comments.filter(c => c.reviewId === r.id).map(c => ({ id: c.id, author: c.author, text: c.text, created_at: c.created_at }));
+  } else if ((m = /^\/reviews\/([^/]+)\/audit$/.exec(route)) && method === "GET") {
+    const r = reviewFor(db, user, decodeURIComponent(m[1]));
+    out = db.audit.filter(a => a.reviewId === r.id).map(a => ({ id: a.id, actor: a.actor, event_type: a.event_type, detail: a.detail, reason: a.reason, created_at: a.created_at }));
+  } else if ((m = /^\/reviews\/([^/]+)\/assign$/.exec(route)) && method === "POST") {
+    if (user.role !== "manager") throw forbidden("Only managers can assign reviewers.");
+    const r = reviewFor(db, user, decodeURIComponent(m[1]));
+    const reviewer = userById(text(body.reviewer_id));
+    if (!reviewer || reviewer.role !== "reviewer" || reviewer.workspace_id !== user.workspace_id) throw invalid("Reviewer must be a reviewer in the same workspace.");
+    r.assignedReviewer = reviewer.id; r.updatedAt = new Date().toISOString();
+    db.audit.push({ id: db.seq.audit++, reviewId: r.id, actor: user.name, event_type: "review_assigned", detail: { reviewer_id: reviewer.id, reviewer: reviewer.name }, reason: "Assigned for collaborative review", created_at: new Date().toISOString() });
+    out = { id: r.id, status: r.status };
+  } else if ((m = /^\/reviews\/([^/]+)\/escalate$/.exec(route)) && method === "POST") {
+    if (user.role !== "manager") throw forbidden("Only managers can escalate reviews.");
+    const r = reviewFor(db, user, decodeURIComponent(m[1]));
+    const reason = text(body.reason).trim(); if (!reason) throw invalid("reason: field required");
+    r.escalationReason = reason; r.updatedAt = new Date().toISOString();
+    db.audit.push({ id: db.seq.audit++, reviewId: r.id, actor: user.name, event_type: "review_escalated", detail: { reason }, reason, created_at: new Date().toISOString() });
+    out = { id: r.id, status: r.status };
   } else if ((m = /^\/reviews\/([^/]+)\/comments$/.exec(route)) && method === "POST") {
     if (!["creator", "manager"].includes(user.role)) throw forbidden("Only creators and managers can comment.");
     reviewFor(db, user, decodeURIComponent(m[1]));
     const t = text(body.text).trim();
     if (!t) throw invalid("text: field required");
-    out = { id: `C-${db.seq.comment++}`, author: user.name, text: t, created_at: new Date().toISOString() };
+    const created_at = new Date().toISOString();
+    const id = `C-${db.seq.comment++}`;
+    db.comments.push({ id, reviewId: decodeURIComponent(m[1]), author: user.name, text: t, created_at });
+    db.audit.push({ id: db.seq.audit++, reviewId: decodeURIComponent(m[1]), actor: user.name, event_type: "comment_added", detail: { comment_id: id }, reason: "", created_at });
+    out = { id, author: user.name, text: t, created_at };
   } else if ((m = /^\/reviews\/([^/]+)\/(approve|request-changes)$/.exec(route)) && method === "POST") {
     if (user.role !== "reviewer") throw forbidden("Only reviewers can approve or request changes.");
     const r = reviewFor(db, user, decodeURIComponent(m[1]));
@@ -359,6 +397,14 @@ export async function mockRequest<T>(path: string, init: RequestInit = {}, token
       approved_this_month: rows.filter(r => r.status === "approved" && r.decidedAt && +new Date(r.decidedAt) >= monthStart).length,
       top_issues: [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 5).map(([type, count]) => ({ type, count })),
     } satisfies InsightsSummary;
+  } else if (route === "/insights/recurring") {
+    const rows = db.reviews.filter(r => canView(user, r));
+    const counts = new Map<FindingType, number>();
+    for (const f of db.findings) if (rows.some(r => r.id === f.reviewId)) counts.set(f.type, (counts.get(f.type) ?? 0) + 1);
+    out = [...counts].filter(([, count]) => count >= 2).slice(0, 5).map(([type, count]) => {
+      const review_count = new Set(db.findings.filter(f => f.type === type && rows.some(r => r.id === f.reviewId)).map(f => f.reviewId)).size;
+      return { type, count, review_count, rate: review_count / Math.max(1, rows.length), recommendation: "Review the related Brand Kit guidance and publishing workflow." };
+    });
   } else if (route === "/insights/gaps") {
     if (user.role !== "brand_admin") throw forbidden("Only brand admins can view guideline-gap insights.");
     const counts = new Map<string, number>();

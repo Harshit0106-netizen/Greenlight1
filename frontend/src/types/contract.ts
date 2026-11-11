@@ -1,93 +1,220 @@
-/**
- * Frontend mirror of the fixed Greenlight API contract in PROJECT.md.
- * Keep these wire shapes unchanged; UI-specific models belong in feature adapters.
- */
-export type UserRole = "creator" | "manager" | "reviewer" | "brand_admin";
-export type ReviewApiStatus = "draft" | "scanned" | "resolving" | "in_review" | "approved" | "changes_requested";
-export type SourceKind = "guideline" | "fact" | "term" | "asset";
-export type FindingType = "unsupported_claim" | "contradicted_claim" | "terminology" | "tone" | "accessibility" | "visual";
-export type ApiSeverity = "high" | "medium" | "low";
-export type FindingMethod = "rule_based" | "ai_assisted";
-export type FindingAction = "accepted" | "edited" | "disputed";
+export type UserRole =
+  | "creator"
+  | "reviewer"
+  | "manager"
+  | "brand_admin";
 
-export interface ApiUser {
+export type LoginRequest = {
+  email: string;
+  password: string;
+};
+
+export type LoginResponse = {
+  access_token: string;
+  token_type: string;
+  user: {
+    id: string;
+    email: string;
+    name: string;
+    role: UserRole;
+    workspace_id: string;
+  };
+};
+
+export type CollaboratorUser = {
   id: string;
+  email: string;
   name: string;
   role: UserRole;
-  workspace_id: string;
-}
+};
 
-export interface LoginRequest { email: string; password: string }
-export interface LoginResponse { access_token: string; token_type: "bearer"; user: ApiUser }
+export type SourceKind =
+  | "guideline"
+  | "fact"
+  | "visual"
+  | "example"
+  | "other";
 
-export interface BrandSource {
+export type BrandSource = {
   id: string;
-  kind: SourceKind;
+  public_id: string;
   title: string;
-  text: string;
-  version: string;
-  status: string;
-}
-export interface CreateBrandSourceRequest { kind: SourceKind; title: string; text: string }
+  kind: SourceKind;
+  content: string;
+  version: number;
+  active: boolean;
+};
 
-export interface ReviewListItem {
+export type CreateBrandSourceRequest = {
+  title: string;
+  kind: SourceKind;
+  content: string;
+};
+
+export type ContentBlock = {
+  type: "text" | "image" | "asset";
+  value: string;
+  alt_text?: string;
+  label?: string;
+};
+
+export type ReviewStatus =
+  | "draft"
+  | "scanned"
+  | "resolving"
+  | "in_review"
+  | "approved"
+  | "changes_requested";
+
+export type CreateReviewRequest = {
+  title: string;
+  content: string;
+  intent_note?: string;
+  content_type?: "text" | "multimodal" | "structured";
+  content_blocks?: ContentBlock[];
+  external_ref?: string | null;
+};
+
+export type CreateReviewResponse = {
+  id: string;
+  status: ReviewStatus;
+  finding_count: number;
+};
+
+export type ReviewListItem = {
   id: string;
   title: string;
   creator: string;
-  status: ReviewApiStatus;
+  status: ReviewStatus;
   finding_count: number;
   updated_at: string;
-}
-export interface CreateReviewRequest { title: string; content: string; intent_note: string }
-export interface CreateReviewResponse { id: string; status: ReviewApiStatus; finding_count: number }
-export interface ReviewDetail {
+};
+
+export type ReviewDetail = {
   id: string;
   title: string;
   content: string;
-  status: ReviewApiStatus;
+  status: ReviewStatus;
   creator: string;
   brand_kit_version: string;
   updated_at: string;
-}
+};
 
-export interface FindingSpan { start: number; end: number; text: string }
-export interface FindingSource { kind: SourceKind; id: string; version: string }
-export type FactMatch = { id: string; version?: string; text?: string } | null;
-export interface FindingSuggestion { text: string; fact_id: string | null; applied: boolean }
-export interface FindingDecision {
-  action: FindingAction;
-  reason: string;
-  actor: string;
-}
-export interface ApiFinding {
-  finding_id: string;
-  type: FindingType;
-  severity: ApiSeverity;
-  span: FindingSpan;
-  source: FindingSource | null;
-  fact_match: FactMatch;
+export type ApiFinding = {
+  id: string;
+  type: string;
+  severity: string;
+  span_start: number;
+  span_end: number;
+  span_text: string;
+  source_kind?: string | null;
+  source_id?: string | null;
+  source_version?: number | null;
+  fact_match?: string | null;
   reason: string;
   confidence: number;
-  method: FindingMethod;
-  suggestion: FindingSuggestion | null;
-  decision: FindingDecision | null;
-}
-export interface PatchFindingRequest { action: FindingAction; reason: string; edited_text: string | null }
-export interface PatchFindingResponse { finding_id: string; decision: FindingDecision }
+  method: string;
+  suggestion: string;
+};
 
-export interface CreateCommentRequest { text: string }
-export interface CommentResponse { id: string; author: string; text: string; created_at: string }
-export interface WorkflowNoteRequest { note: string }
-export interface WorkflowResponse { id: string; status: ReviewApiStatus }
-export interface InsightsSummary {
+export type FindingAction =
+  | "accepted"
+  | "edited"
+  | "disputed"
+  | "dismissed"
+  | "resolved";
+
+export type PatchFindingRequest = {
+  action: FindingAction;
+  note?: string;
+};
+
+export type PatchFindingResponse = {
+  id: string;
+  decision: string;
+};
+
+export type CreateCommentRequest = {
+  text: string;
+};
+
+export type CommentResponse = {
+  id: string;
+  author: string;
+  text: string;
+  created_at: string;
+};
+
+export type ReviewCollaboration = {
+  assigned_reviewer?: string | null;
+  reviewer?: string | null;
+  status: ReviewStatus;
+  comments?: CommentResponse[];
+  approvals?: unknown[];
+};
+
+export type AuditResponse = {
+  id: number;
+  actor: string;
+  event_type: string;
+  detail: Record<string, unknown>;
+  reason: string;
+  created_at: string;
+};
+
+export type AssignmentRequest = {
+  reviewer_id: string;
+};
+
+export type EscalationRequest = {
+  reason: string;
+};
+
+export type WorkflowNoteRequest = {
+  note?: string;
+};
+
+export type WorkflowResponse = {
+  id: string;
+  status: ReviewStatus;
+};
+
+export type TopIssue = {
+  type: string;
+  count: number;
+};
+
+export type InsightsSummary = {
   reviewed_this_month: number;
   needs_attention: number;
   awaiting_approval: number;
   approved_this_month: number;
-  top_issues: Array<{ type: FindingType; count: number }>;
-}
-export interface InsightGap { source_id: string; title: string; dispute_count: number; note: string }
-export interface AiDisclosure {
+  top_issues: TopIssue[];
+};
+
+export type InsightGap = {
+  source_id: string;
+  title: string;
+  dispute_count: number;
+  note: string;
+};
+
+export type RecurringIssue = {
+  type: string;
+  count: number;
+  review_count: number;
+  rate: number;
+  recommendation: string;
+};
+
+export type DisclosureStep = {
+  step: string;
+  used_ai: boolean;
+  model?: string | null;
+  data_sent?: string | null;
+};
+
+export type AiDisclosure = {
   review_id: string;
-  steps: Array<{ step: string; used_ai: boolean; model?: string; data_sent?: string }>;
-}
+  steps: DisclosureStep[];
+};

@@ -9,7 +9,7 @@ import { getSessionUser, onSessionChange } from "@/lib/session";
 import { reviewFromApi, type ReviewMeta } from "./adapters";
 import { markTour, resetTour } from "@/features/tour/store";
 import { canApprove } from "./metrics";
-import type { AuditEntry, AuditKind, FindingStatus, Review, ReviewInput } from "../types";
+import type { AuditEntry, AuditKind, CommentEntry, FindingStatus, Review, ReviewInput } from "../types";
 
 /**
  * Review repository. Every read and write goes through lib/api.ts (mock or live, one switch).
@@ -41,10 +41,36 @@ function log(reviewId: string, kind: AuditKind, message: string, findingId?: str
   auditStore.update(all => ({ ...all, [key(reviewId)]: [...(all[key(reviewId)] ?? []), e] }));
 }
 
+function auditMessage(event: string, detail: Record<string, unknown>, reason: string) {
+  if (event === "review_submitted") return "Review submitted for brand review.";
+  if (event === "scan_completed") return `Automated analysis completed with ${String(detail.findings ?? 0)} finding${Number(detail.findings) === 1 ? "" : "s"}.`;
+  if (event === "structured_content_validated") return `Structured content checked: ${String(detail.image_assets ?? 0)} visual asset${Number(detail.image_assets) === 1 ? "" : "s"}, ${String(detail.missing_alt_text ?? 0)} missing alt-text item${Number(detail.missing_alt_text) === 1 ? "" : "s"}.`;
+  if (event === "content_edited") return `Draft updated to version ${String(detail.version ?? "")}${reason ? ` — ${reason}` : ""}.`;
+  if (event === "finding_decision") return `Finding ${String(detail.finding_id ?? "")} marked ${String(detail.action ?? "")} ${reason ? `— ${reason}` : ""}`;
+  if (event === "review_assigned") return `Review assigned to ${String(detail.reviewer ?? "a reviewer")}.`;
+  if (event === "review_escalated") return `Review escalated${reason ? ` — ${reason}` : ""}.`;
+  if (event === "comment_added") return "Comment added to the review.";
+  if (event === "approved") return `Review approved${reason ? ` — ${reason}` : ""}.`;
+  if (event === "changes_requested") return `Changes requested${reason ? ` — ${reason}` : ""}.`;
+  if (event === "status_changed") return `Status changed from ${String(detail.from ?? "")} to ${String(detail.to ?? "")}${reason ? ` — ${reason}` : ""}.`;
+  return event.replaceAll("_", " ");
+}
+
 async function fetchReview(id: string): Promise<Review | null> {
   try {
-    const [detail, findings] = await Promise.all([api.getReview(id), api.getFindings(id)]);
-    return reviewFromApi(detail, findings, sources, metaStore.read()[key(id)], auditStore.read()[key(id)] ?? [], dataSource());
+    const [detail, findings, collaboration, audit, comments] = await Promise.all([
+      api.getReview(id), api.getFindings(id), api.getCollaboration(id).catch(() => ({})),
+      api.getAudit(id).catch(() => []), api.getComments(id).catch(() => []),
+    ]);
+    const serverAudit: AuditEntry[] = audit.map(e => ({
+      id: `AU-${e.id}`, at: e.created_at, actor: e.actor,
+      kind: e.event_type === "review_assigned" ? "assignment" : e.event_type === "review_escalated" ? "escalation" : e.event_type === "comment_added" ? "comment" : e.event_type === "finding_decision" ? "decision" : e.event_type === "content_edited" ? "edit" : e.event_type === "status_changed" || e.event_type === "approved" || e.event_type === "changes_requested" ? "status" : e.event_type === "scan_completed" || e.event_type === "structured_content_validated" ? "analysis" : "submitted" as AuditKind,
+      message: auditMessage(e.event_type, e.detail, e.reason),
+    }));
+    const localAudit = auditStore.read()[key(id)] ?? [];
+    const merged = serverAudit.length ? serverAudit : localAudit;
+    const mappedComments: CommentEntry[] = comments.map(c => ({ id: c.id, author: c.author, text: c.text, at: c.created_at }));
+    return reviewFromApi(detail, findings, sources, metaStore.read()[key(id)], merged, dataSource(), mappedComments, collaboration);
   } catch { return null; }
 }
 async function refreshOne(id: string) {
@@ -90,7 +116,7 @@ export function resetReviews(mode = getMode()) {
 }
 
 export async function createReview(input: ReviewInput): Promise<Review> {
-  const created = await api.createReview({ title: input.title, content: input.content, intent_note: input.intent ?? "" });
+  const created = await api.createReview({ title: input.title, content: input.content, intent_note: input.intent ?? "", content_type: input.contentType, content_blocks: input.contentBlocks, external_ref: input.externalRef });
   metaStore.update(m => ({ ...m, [key(created.id)]: { channel: input.channel, mode: input.mode, intent: input.intent, original: input.content } }));
   markTour("submit");
   log(created.id, "submitted", "Submitted for review");

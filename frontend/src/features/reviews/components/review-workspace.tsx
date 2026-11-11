@@ -15,6 +15,7 @@ import { FindingEvidence } from "./finding-evidence";
 import { FindingList } from "./finding-list";
 import { ReviewOutcome } from "./review-outcome";
 import { ReviewSummary } from "./review-summary";
+import { CollaborationPanel } from "./collaboration-panel";
 
 const toastFor = {
   Accepted: "Finding confirmed as a valid issue. Edit the wording before approval.",
@@ -96,6 +97,7 @@ export function ReviewWorkspace({ id }: { id: string }) {
           <FindingEvidence finding={current} canApply={canApply} canResolve={canResolve} busy={busy}
             position={current ? { index: findings.findIndex(f => f.id === current.id) + 1, total: findings.length, onStep: d => { const i = findings.findIndex(f => f.id === current.id); const n = findings[i + d]; if (n) setSelected(n.id); } } : undefined}
             onDecide={decide} onApply={() => current && rewrite(current.suggestion, "suggestion")} onRewrite={t => rewrite(t, "manual")} />
+          <CollaborationPanel review={review} />
           <ReviewOutcome review={review} canDecide={can.decide(user?.role)} busy={busy}
             onApprove={note => run(async () => { const ok = await approveReview(id, note); if (!ok) throw new Error("Approval is blocked until every finding is edited or marked not applicable."); }, "Review approved. Every finding has a recorded decision.")}
             onRequestChanges={note => run(() => requestChanges(id, note), "Changes requested. The creator will see your note.", "info")} />

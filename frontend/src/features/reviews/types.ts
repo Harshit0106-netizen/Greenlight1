@@ -2,7 +2,7 @@ export type FindingSeverity = "High" | "Medium" | "Low";
 export type FindingStatus = "Open" | "Accepted" | "Edited" | "Disputed";
 export type ReviewStatus = "Needs attention" | "In review" | "Approved" | "Changes requested";
 export type AnalysisSource = "local-demo" | "api";
-export type AuditKind = "submitted" | "analysis" | "finding" | "edit" | "status";
+export type AuditKind = "submitted" | "analysis" | "finding" | "edit" | "status" | "comment" | "assignment" | "escalation" | "decision";
 
 export const CHANNELS = ["Social media", "Website", "Email", "Presentation", "Advertisement", "Print"] as const;
 export const REVIEW_MODES = ["Full brand review", "Essential checks only"] as const;
@@ -33,6 +33,8 @@ export interface Finding {
   decisionReason?: string;
 }
 
+export interface CommentEntry { id: string; author: string; text: string; at: string }
+
 export interface AuditEntry {
   id: string;
   at: string;
@@ -59,7 +61,13 @@ export interface Review {
   summary?: string;
   findings: Finding[];
   audit: AuditEntry[];
+  comments: CommentEntry[];
+  assignedReviewer?: string;
+  escalationReason?: string;
+  contentType?: string;
+  externalRef?: string;
+  contentBlocks?: Array<{ type: "text" | "image" | "asset"; value: string; alt_text?: string; label?: string }>;
 }
 
-export type ReviewInput = { title: string; channel: string; content: string; intent?: string; brandKit: string; mode: string };
+export type ReviewInput = { title: string; channel: string; content: string; intent?: string; brandKit: string; mode: string; contentType?: "text" | "multimodal" | "structured"; contentBlocks?: Array<{ type: "text" | "image" | "asset"; value: string; alt_text?: string; label?: string }>; externalRef?: string };
 export type ReviewAnalysis = { findings: Finding[]; provider: AnalysisSource; summary: string; discarded?: number };

@@ -1,12 +1,35 @@
-import type {
-  AiDisclosure, ApiFinding, BrandSource, CommentResponse, CreateBrandSourceRequest,
-  CreateCommentRequest, CreateReviewRequest, CreateReviewResponse, FindingAction,
-  InsightGap, InsightsSummary, LoginRequest, LoginResponse, PatchFindingRequest,
-  PatchFindingResponse, ReviewDetail, ReviewListItem, SourceKind, WorkflowNoteRequest,
-  WorkflowResponse,
-} from "@/types/contract";
 import { ApiError } from "./api-error";
 import { mockRequest } from "./mockData";
+
+import type {
+  LoginRequest,
+  LoginResponse,
+  UserRole,
+  CollaboratorUser,
+  SourceKind,
+  BrandSource,
+  CreateBrandSourceRequest,
+  ReviewListItem,
+  CreateReviewRequest,
+  CreateReviewResponse,
+  ReviewDetail,
+  ApiFinding,
+  PatchFindingRequest,
+  PatchFindingResponse,
+  CreateCommentRequest,
+  CommentResponse,
+  ReviewCollaboration,
+  AuditResponse,
+  AssignmentRequest,
+  WorkflowResponse,
+  EscalationRequest,
+  WorkflowNoteRequest,
+  InsightsSummary,
+  InsightGap,
+  RecurringIssue,
+  AiDisclosure,
+  FindingAction,
+} from "../types/contract";
 
 const DEFAULT_TIMEOUT_MS = 12_000;
 const TOKEN_KEY = "greenlight-access-token";
@@ -124,6 +147,8 @@ export const api = {
   },
   logout: () => clearAccessToken(),
 
+  getWorkspaceUsers: (role?: UserRole) => request<CollaboratorUser[]>(`/auth/users${role ? `?role=${enc(role)}` : ""}`),
+
   getBrandSources: (kind?: SourceKind) => request<BrandSource[]>(
     `/brand-kit/sources${kind ? `?kind=${enc(kind)}` : ""}`,
   ),
@@ -135,11 +160,17 @@ export const api = {
   getFindings: (id: string) => request<ApiFinding[]>(`/reviews/${enc(id)}/findings`),
   updateFinding: (findingId: string, body: PatchFindingRequest) => request<PatchFindingResponse>(`/findings/${enc(findingId)}`, json("PATCH", body)),
   addComment: (reviewId: string, body: CreateCommentRequest) => request<CommentResponse>(`/reviews/${enc(reviewId)}/comments`, json("POST", body)),
+  getCollaboration: (reviewId: string) => request<ReviewCollaboration>(`/reviews/${enc(reviewId)}/collaboration`),
+  getComments: (reviewId: string) => request<CommentResponse[]>(`/reviews/${enc(reviewId)}/comments`),
+  getAudit: (reviewId: string) => request<AuditResponse[]>(`/reviews/${enc(reviewId)}/audit`),
+  assignReviewer: (reviewId: string, body: AssignmentRequest) => request<WorkflowResponse>(`/reviews/${enc(reviewId)}/assign`, json("POST", body)),
+  escalateReview: (reviewId: string, body: EscalationRequest) => request<WorkflowResponse>(`/reviews/${enc(reviewId)}/escalate`, json("POST", body)),
   approveReview: (reviewId: string, body: WorkflowNoteRequest) => request<WorkflowResponse>(`/reviews/${enc(reviewId)}/approve`, json("POST", body)),
   requestChanges: (reviewId: string, body: WorkflowNoteRequest) => request<WorkflowResponse>(`/reviews/${enc(reviewId)}/request-changes`, json("POST", body)),
 
   getInsightsSummary: () => request<InsightsSummary>("/insights/summary"),
   getInsightGaps: () => request<InsightGap[]>("/insights/gaps"),
+  getRecurringInsights: () => request<RecurringIssue[]>("/insights/recurring"),
   getAiDisclosure: (reviewId: string) => request<AiDisclosure>(`/reviews/${enc(reviewId)}/ai-disclosure`),
 };
 

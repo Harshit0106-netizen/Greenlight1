@@ -1,4 +1,4 @@
-import { Bot, CheckCircle2, FilePlus2, Gavel, Pencil, type LucideIcon } from "lucide-react";
+import { Bot, CheckCircle2, FilePlus2, Gavel, Pencil, MessageCircle, UserPlus, TriangleAlert, type LucideIcon } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import type { AuditEntry, AuditKind } from "../types";
@@ -8,7 +8,11 @@ export const auditMeta: Record<AuditKind, { icon: LucideIcon; tone: string; labe
   analysis: { icon: Bot, tone: "bg-info/10 text-info", label: "Analysis" },
   finding: { icon: Gavel, tone: "bg-warning/10 text-warning", label: "Decision" },
   edit: { icon: Pencil, tone: "bg-success/10 text-success", label: "Edit" },
-  status: { icon: CheckCircle2, tone: "bg-success/10 text-success", label: "Status" }
+  status: { icon: CheckCircle2, tone: "bg-success/10 text-success", label: "Status" },
+  comment: { icon: MessageCircle, tone: "bg-info/10 text-info", label: "Comment" },
+  assignment: { icon: UserPlus, tone: "bg-brand/10 text-brand", label: "Assignment" },
+  escalation: { icon: TriangleAlert, tone: "bg-warning/10 text-warning", label: "Escalation" },
+  decision: { icon: Gavel, tone: "bg-warning/10 text-warning", label: "Decision" }
 };
 
 export function AuditTimeline({ entries }: { entries: AuditEntry[] }) {

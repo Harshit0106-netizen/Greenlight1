@@ -212,3 +212,40 @@ Findings can only be decided while the review is `scanned`, `resolving` or `chan
 4. **No `GET /auth/me`** to restore the session after a page refresh (the token alone does not carry the user's name).
 5. **No re-scan after edits.** Edits are applied to the text and recorded, but findings are not re-run.
 
+
+### Collaboration and multimodal review additions
+
+`POST /reviews` accepts optional structured content metadata in addition to the original fields:
+```json
+{
+  "title": "Campaign review",
+  "content": "Launch copy...",
+  "intent_note": "Product launch",
+  "content_type": "multimodal",
+  "external_ref": "cms-4821",
+  "content_blocks": [
+    {"type": "text", "value": "Launch copy..."},
+    {"type": "image", "value": "https://cdn.example/banner.png", "alt_text": "Product launch banner", "label": "Hero banner"}
+  ]
+}
+```
+
+`GET /reviews/{id}/collaboration` returns the review's assignment, escalation state and structured content metadata.
+
+`GET /reviews/{id}/comments` returns the full comment thread.
+
+`GET /reviews/{id}/audit` returns the authoritative activity history, including actor, event type, detail, reason and timestamp.
+
+`POST /reviews/{id}/assign` (manager only)
+```json
+{"reviewer_id": "U-3"}
+```
+
+`POST /reviews/{id}/escalate` (manager only)
+```json
+{"reason": "Needs legal review before publication."}
+```
+
+`GET /insights/recurring` returns recurring issue patterns across visible reviews, including occurrence count, affected review count, review coverage rate and an actionable recommendation.
+
+These additions are backward-compatible with the original review detail and insights summary response shapes.

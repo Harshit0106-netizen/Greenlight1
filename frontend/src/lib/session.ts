@@ -76,4 +76,5 @@ export const can = {
   editBrandKit: (r?: UserRole) => r === "brand_admin",
   seeApprovals: (r?: UserRole) => r === "reviewer" || r === "manager",
   seeGaps: (r?: UserRole) => r === "brand_admin",
+  comment: (r?: UserRole) => r === "creator" || r === "manager",
 };

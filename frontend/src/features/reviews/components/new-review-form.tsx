@@ -11,7 +11,7 @@ import { createReview } from "../lib/store";
 import { samples } from "../lib/samples";
 import { CHANNELS, REVIEW_MODES, type ReviewInput } from "../types";
 
-const blank: ReviewInput = { title: "", channel: "Social media", content: "", intent: "", brandKit: workspace.brandKit, mode: "Full brand review" };
+const blank: ReviewInput = { title: "", channel: "Social media", content: "", intent: "", brandKit: workspace.brandKit, mode: "Full brand review", contentType: "text", contentBlocks: [], externalRef: "" };
 
 export function NewReviewForm() {
   const router = useRouter();
@@ -80,12 +80,139 @@ export function NewReviewForm() {
             <Field label="Depth"><Select value={form.mode} onChange={e => set("mode", e.target.value as ReviewInput["mode"])}>{REVIEW_MODES.map(m => <option key={m}>{m}</option>)}</Select></Field>
             <Field label="Brand knowledge"><Select value={form.brandKit} onChange={e => set("brandKit", e.target.value)}><option>{workspace.brandKit}</option></Select></Field>
             <Field label="Context" className="sm:col-span-2"><Textarea value={form.intent} onChange={e => set("intent", e.target.value)} rows={2} placeholder="Audience or goal. Optional." /></Field>
+            <Field label="Content coverage"><Select value={form.contentType ?? "text"} onChange={e => set("contentType", e.target.value as ReviewInput["contentType"])}><option value="text">Text only</option><option value="multimodal">Text + visual assets</option><option value="structured">Structured content / API</option></Select></Field>
+            <Field label="External content ID"><Input value={form.externalRef ?? ""} onChange={e => set("externalRef", e.target.value)} placeholder="CMS / campaign / ticket ID" /></Field>
+           {(form.contentType === "multimodal" || form.contentType === "structured") && (
+  <Field label="Visual / structured assets" className="sm:col-span-2">
+    <div className="space-y-3">
+      {(form.contentBlocks ?? []).map((block, index) => (
+        <div
+          key={index}
+          className="rounded-xl border border-line bg-soft/40 p-3"
+        >
+          <div className="grid gap-3 sm:grid-cols-[140px_1fr]">
+            <Field label="Type">
+              <Select
+                value={block.type}
+                onChange={e => {
+                  const blocks = [...(form.contentBlocks ?? [])];
+
+                  blocks[index] = {
+                    ...blocks[index],
+                    type: e.target.value as "text" | "image" | "asset",
+                  };
+
+                  set("contentBlocks", blocks);
+                }}
+              >
+                <option value="image">Image</option>
+                <option value="asset">Asset</option>
+                <option value="text">Text</option>
+              </Select>
+            </Field>
+
+            <Field label="URL / value">
+              <Input
+                value={block.value}
+                onChange={e => {
+                  const blocks = [...(form.contentBlocks ?? [])];
+
+                  blocks[index] = {
+                    ...blocks[index],
+                    value: e.target.value,
+                  };
+
+                  set("contentBlocks", blocks);
+                }}
+                placeholder="https://… or structured content"
+              />
+            </Field>
+
+            <Field label="Label">
+              <Input
+                value={block.label ?? ""}
+                onChange={e => {
+                  const blocks = [...(form.contentBlocks ?? [])];
+
+                  blocks[index] = {
+                    ...blocks[index],
+                    label: e.target.value,
+                  };
+
+                  set("contentBlocks", blocks);
+                }}
+                placeholder="Optional asset label"
+              />
+            </Field>
+
+            <Field label="Alt text">
+              <Input
+                value={block.alt_text ?? ""}
+                onChange={e => {
+                  const blocks = [...(form.contentBlocks ?? [])];
+
+                  blocks[index] = {
+                    ...blocks[index],
+                    alt_text: e.target.value,
+                  };
+
+                  set("contentBlocks", blocks);
+                }}
+                placeholder="Describe the visual"
+              />
+            </Field>
+          </div>
+
+          <div className="mt-3 flex justify-end">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                const blocks = [...(form.contentBlocks ?? [])];
+                blocks.splice(index, 1);
+                set("contentBlocks", blocks);
+              }}
+            >
+              Remove
+            </Button>
+          </div>
+        </div>
+      ))}
+
+      <Button
+        type="button"
+        size="sm"
+        variant="secondary"
+        onClick={() =>
+          set("contentBlocks", [
+            ...(form.contentBlocks ?? []),
+            {
+              type: "image",
+              value: "",
+              label: "",
+              alt_text: "",
+            },
+          ])
+        }
+      >
+        + Add visual asset
+      </Button>
+    </div>
+
+    <p className="mt-2 text-[11px] text-muted">
+      Add visual or structured content that will be included in the review
+      record and audit trail. Images can be checked for missing descriptive
+      metadata and visual brand references.
+    </p>
+  </Field>
+)}
           </div>
         </details>
 
         {error && <p role="alert" className="rounded-lg border border-danger/25 bg-danger/10 px-3 py-2.5 text-xs text-danger">{error}</p>}
         <div className="flex items-center justify-between gap-4">
-          <p className="text-xs text-muted">Text only for now. Image checks arrive later.</p>
+          <p className="text-xs text-muted">{form.contentType === "text" ? "Text review with evidence and human decisions." : "Structured and visual assets are included in the review record and audit trail."}</p>
           <Button type="submit" size="lg" loading={busy}><ScanSearch size={16} /> {busy ? "Checking…" : "Run review"}</Button>
         </div>
       </form>

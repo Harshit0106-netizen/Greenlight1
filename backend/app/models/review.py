@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -20,6 +20,11 @@ class Review(Base):
     brand_kit_version: Mapped[int] = mapped_column(Integer)  # pinned at submission
     current_version: Mapped[int] = mapped_column(Integer, default=1)
     scan_mode: Mapped[str] = mapped_column(String(20), default="full")  # full | rules_only
+    assigned_reviewer_id: Mapped[str | None] = mapped_column(ForeignKey("app_user.id"), nullable=True, index=True)
+    escalation_reason: Mapped[str] = mapped_column(Text, default="")
+    content_type: Mapped[str] = mapped_column(String(30), default="text")
+    external_ref: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    content_blocks: Mapped[list] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
