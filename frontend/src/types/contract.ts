@@ -218,3 +218,15 @@ export type AiDisclosure = {
   review_id: string;
   steps: DisclosureStep[];
 };
+
+// -----------------------------------------------------------------------------
+// Backward-compatible frontend aliases
+// -----------------------------------------------------------------------------
+
+export type ApiUser = LoginResponse["user"];
+
+export type FindingType = string;
+
+export type ApiSeverity = "high" | "medium" | "low";
+
+export type ReviewApiStatus = ReviewStatus;

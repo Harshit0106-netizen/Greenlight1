@@ -37,7 +37,7 @@ export function DashboardView() {
   const reviews = useReviews();
   const loaded = useReviewsLoaded();
   const summary = useAsync(() => api.getInsightsSummary()).data;
-  const role = user?.role ?? "creator";
+  const role = (user?.role ?? "creator") as UserRole;
   const focus = FOCUS[role];
   const next = reviews.filter(focus.pick).slice(0, 5);
   const recent = [...reviews].sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt)).slice(0, 6);

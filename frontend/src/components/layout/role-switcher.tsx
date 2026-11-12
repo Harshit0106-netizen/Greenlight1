@@ -49,7 +49,7 @@ export function RoleSwitcher() {
         <Avatar name={user?.name ?? "—"} size={28} />
         <span className="hidden sm:block">
           <span className="block text-[10px] font-semibold uppercase tracking-wider text-muted">Viewing as</span>
-          <span className="block text-xs font-bold leading-tight text-ink">{user ? ROLE_LABEL[user.role] : "—"}</span>
+          <span className="block text-xs font-bold leading-tight text-ink">{user ? ROLE_LABEL[user.role as UserRole] : "—"}</span>
         </span>
         <ChevronDown size={14} className={`text-muted transition ${open ? "rotate-180" : ""}`} />
       </button>

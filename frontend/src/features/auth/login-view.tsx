@@ -1,4 +1,5 @@
 "use client";
+import type { UserRole } from "@/types/contract";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Compass, ShieldCheck } from "lucide-react";
@@ -90,8 +91,8 @@ export function LoginView() {
               {accounts.map(a => (
                 <button key={a.id} type="button" disabled={busy !== ""} onClick={() => demoSignIn(a)}
                   className="rounded-xl border border-line p-3.5 text-left transition hover:border-brand/50 hover:bg-brand/5 disabled:opacity-60">
-                  <span className="block text-sm font-semibold">{ROLE_LABEL[a.role]}</span>
-                  <span className="mt-0.5 block text-xs leading-4 text-muted">{ROLE_HINT[a.role]}</span>
+                  <span className="block text-sm font-semibold">{ROLE_LABEL[a.role as UserRole]}</span>
+                  <span className="mt-0.5 block text-xs leading-4 text-muted">{ROLE_HINT[a.role as UserRole]}</span>
                 </button>
               ))}
             </div>
@@ -122,7 +123,7 @@ export function LoginView() {
                     <li key={a.id}>
                       <button type="button" onClick={() => { setEmail(a.email); setPassword(MOCK_PASSWORD); setError(""); }}
                         className="flex w-full items-center justify-between gap-3 rounded-xl border border-line bg-surface px-3 py-2 text-left transition hover:border-brand/50">
-                        <span className="min-w-0"><span className="block text-xs font-bold">{ROLE_LABEL[a.role]}</span><span className="block truncate text-[11px] text-muted">{a.email}</span></span>
+                        <span className="min-w-0"><span className="block text-xs font-bold">{ROLE_LABEL[a.role as UserRole]}</span><span className="block truncate text-[11px] text-muted">{a.email}</span></span>
                         <span className="shrink-0 text-[11px] font-semibold text-brand">Use</span>
                       </button>
                     </li>

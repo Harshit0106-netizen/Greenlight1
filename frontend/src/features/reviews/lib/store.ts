@@ -132,7 +132,8 @@ const verb = { Accepted: "Confirmed finding", Disputed: "Marked not applicable" 
 /** Confirm a finding as valid, or dispute it. Disputing needs a reason (the server requires one too). */
 export async function decideFinding(id: string, findingId: string, status: Extract<FindingStatus, "Accepted" | "Disputed">, reason = "") {
   const f = state.reviews.find(r => r.id === id)?.findings.find(x => x.id === findingId);
-  await api.updateFinding(findingId, { action: status === "Accepted" ? "accepted" : "disputed", reason: reason.trim(), edited_text: null });
+ await api.updateFinding(findingId, {
+  action: status === "Accepted" ? "accepted" : "disputed",});
   log(id, "finding", `${verb[status]} “${clip(f?.quote ?? "")}”${reason.trim() ? ` — ${reason.trim()}` : ""}`, findingId);
   await refreshOne(id);
   if (state.reviews.find(r => r.id === id)?.status === "In review") markTour("resolve");
@@ -142,7 +143,7 @@ export async function decideFinding(id: string, findingId: string, status: Extra
 export async function rewriteFinding(id: string, findingId: string, replacement: string, via: "suggestion" | "manual") {
   const f = state.reviews.find(r => r.id === id)?.findings.find(x => x.id === findingId);
   if (!f || !replacement.trim()) return;
-  await api.updateFinding(findingId, { action: "edited", reason: via === "suggestion" ? "Applied the suggested wording." : "Replaced the flagged wording.", edited_text: replacement.trim() });
+  await api.updateFinding(findingId, { action: "edited", });
   metaStore.update(m => {
     const cur = m[key(id)] ?? {};
     return { ...m, [key(id)]: { ...cur, originals: { ...cur.originals, [findingId]: cur.originals?.[findingId] ?? f.quote } } };

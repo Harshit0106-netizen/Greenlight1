@@ -29,15 +29,48 @@ function parseTerm(text: string): { use: string; note: string } {
 const versionNumber = (v: string) => Number(v.replace(/\D/g, "")) || 0;
 
 export function kitFromSources(list: BrandSource[]): { kit: BrandKit; version: string } {
-  const rules: BrandRule[] = [], facts: ApprovedFact[] = [], terms: BrandTerm[] = [];
+  const rules: BrandRule[] = [];
+  const facts: ApprovedFact[] = [];
+  const terms: BrandTerm[] = [];
+
   let top = 0;
+
   for (const s of list) {
-    top = Math.max(top, versionNumber(s.version));
-    if (s.kind === "guideline") rules.push({ id: s.id, title: s.title, category: "Guideline", description: s.text, source: `Brand Kit ${s.version}`, status: "Active" });
-    else if (s.kind === "fact") facts.push({ id: s.id, subject: s.title, approvedText: s.text, source: `Brand Kit ${s.version}`, updatedAt: s.version });
-    else if (s.kind === "term") { const { use, note } = parseTerm(s.text); terms.push({ id: s.id, avoid: s.title, use, note: note || "Approved terminology" }); }
+    top = Math.max(top, s.version);
+
+    if (s.kind === "guideline") {
+      rules.push({
+        id: s.id,
+        title: s.title,
+        category: "Guideline",
+        description: s.content,
+        source: `Brand Kit ${s.version}`,
+        status: "Active",
+      });
+    } else if (s.kind === "fact") {
+      facts.push({
+        id: s.id,
+        subject: s.title,
+        approvedText: s.content,
+        source: `Brand Kit ${s.version}`,
+        updatedAt: String(s.version),
+      });
+    } else if (s.kind === "other") {
+  const { use, note } = parseTerm(s.content);
+
+  terms.push({
+    id: s.id,
+    avoid: s.title,
+    use,
+    note: note || "Approved terminology",
+  });
+} 
   }
-  return { kit: { rules, facts, terms }, version: top ? `v${top}` : "" };
+
+  return {
+    kit: { rules, facts, terms },
+    version: top ? `v${top}` : "",
+  };
 }
 
 async function load() {
@@ -60,10 +93,15 @@ export const getBrandKit = (): BrandKit => (state.loaded ? state.kit : seedKit);
 export function resetBrandKit() { state = BLANK; listeners.forEach(l => l()); ensureLoaded(); }
 
 async function add(kind: BrandSource["kind"], title: string, text: string) {
-  await api.createBrandSource({ kind, title: title.trim(), text: text.trim() });
+  await api.createBrandSource({ kind, title: title.trim(), content: text.trim() });
   markTour("kit");
   await load();
 }
 export const addRule = (r: { title: string; description: string }) => add("guideline", r.title, r.description);
 export const addFact = (f: { subject: string; approvedText: string }) => add("fact", f.subject, f.approvedText);
-export const addTerm = (t: { avoid: string; use: string; note: string }) => add("term", t.avoid, `Use: ${t.use.trim()}.${t.note.trim() ? ` ${t.note.trim()}` : ""}`);
+export const addTerm = (t: { avoid: string; use: string; note: string }) =>
+  add(
+    "other",
+    t.avoid,
+    `Use: ${t.use.trim()}.${t.note.trim() ? ` ${t.note.trim()}` : ""}`
+  );

@@ -1,4 +1,5 @@
 "use client";
+import type { UserRole } from "@/types/contract";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LogOut, Plus, Settings2, Sparkles } from "lucide-react";
@@ -62,7 +63,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           <Avatar name={user?.name ?? "—"} size={32} className="bg-brand/20 text-brand" />
           <div className="min-w-0 flex-1">
             <div className="truncate text-xs font-bold">{user?.name ?? "—"}</div>
-            <div className="text-[11px] text-rail-ink/50">{user ? ROLE_LABEL[user.role] : ""}</div>
+            <div className="text-[11px] text-rail-ink/50">{user ? ROLE_LABEL[user.role as UserRole] : ""}</div>
           </div>
           <button onClick={signOut} aria-label="Sign out" title="Sign out" className="rounded-lg p-2 text-rail-ink/50 transition hover:bg-rail-ink/10 hover:text-rail-ink"><LogOut size={15} /></button>
         </div>

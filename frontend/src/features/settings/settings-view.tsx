@@ -1,4 +1,5 @@
 "use client";
+import type { UserRole } from "@/types/contract";
 import { useState } from "react";
 import { Bell, Building2, Database, Moon, Palette, RotateCcw, Save, Sun, UserRound } from "lucide-react";
 import { Button, Card, CardHeader, Field, Input, Modal, PageHeader, StatusBadge, useToast } from "@/components/ui";
@@ -59,7 +60,7 @@ export function SettingsView() {
             <div className="grid gap-5 p-5 sm:grid-cols-2">
               <Field label="Display name"><Input value={form.displayName} onChange={e => set("displayName", e.target.value)} /></Field>
               <Field label="Email address"><Input type="email" value={form.email} onChange={e => set("email", e.target.value)} /></Field>
-              <div className="sm:col-span-2"><div className="text-xs font-semibold">Workspace role</div><div className="mt-2"><StatusBadge>{role ? ROLE_LABEL[role] : "—"}</StatusBadge></div></div>
+              <div className="sm:col-span-2"><div className="text-xs font-semibold">Workspace role</div><div className="mt-2"><StatusBadge>{role ? ROLE_LABEL[role as UserRole] : "—"}</StatusBadge></div></div>
             </div>
           </Card>
 

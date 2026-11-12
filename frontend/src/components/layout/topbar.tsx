@@ -1,4 +1,5 @@
 "use client";
+import type { UserRole } from "@/types/contract";
 import { Command, Compass, Menu, Search } from "lucide-react";
 import { setTourOpen, tourStore } from "@/features/tour/store";
 import { Avatar } from "@/components/ui";
@@ -38,7 +39,7 @@ export function Topbar({ onMenu, onSearch }: Props) {
         {demo ? <RoleSwitcher /> : (
           <div className="hidden items-center gap-2 sm:flex">
             <Avatar name={user?.name ?? "—"} size={32} />
-            <span className="text-xs font-semibold text-ink">{user?.name}{user && <span className="ml-1.5 font-medium text-muted">· {ROLE_LABEL[user.role]}</span>}</span>
+           <span className="text-xs font-semibold text-ink">{user?.name}{user && <span className="ml-1 font-medium text-muted">· {ROLE_LABEL[user.role as UserRole]}</span>}</span>
           </div>
         )}
       </div>
