@@ -123,11 +123,12 @@ export type FindingAction =
   | "disputed"
   | "dismissed"
   | "resolved";
-
 export type PatchFindingRequest = {
   action: FindingAction;
   note?: string;
+  edited_text?: string | null;
 };
+
 
 export type PatchFindingResponse = {
   id: string;
