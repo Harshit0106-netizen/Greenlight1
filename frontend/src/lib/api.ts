@@ -39,7 +39,9 @@ const TOKEN_KEY = "greenlight-access-token";
  *   NEXT_PUBLIC_USE_MOCK=false + NEXT_PUBLIC_API_URL set -> live sign-in is available (demo is still offered)
  *   anything else                                       -> demo only (built-in sample data, no server)
  */
-export const LIVE_AVAILABLE = process.env.NEXT_PUBLIC_USE_MOCK === "false" && Boolean(process.env.NEXT_PUBLIC_API_URL?.trim());
+export const LIVE_AVAILABLE = Boolean(
+  process.env.NEXT_PUBLIC_API_URL?.trim()
+);
 export type DataMode = "demo" | "live";
 const MODE_KEY = "greenlight-mode";
 export function getMode(): DataMode {
